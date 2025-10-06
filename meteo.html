@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Météo Locale</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap');
+        
+        body {
+            font-family: 'Poppins', sans-serif;
+            background: linear-gradient(135deg, #6DD5FA, #2980B9, #1E3A8A);
+            min-height: 100vh;
+            transition: all 0.5s ease;
+        }
+        
+        .weather-card {
+            backdrop-filter: blur(10px);
+            background: rgba(255, 255, 255, 0.15);
+            box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37);
+            border-radius: 16px;
+            border: 1px solid rgba(255, 255, 255, 0.18);
+        }
+        
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255,255,255,.3);
+            border-radius: 50%;
+            border-top-color: #fff;
+            animation: spin 1s ease-in-out infinite;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        .fade-in {
+            animation: fadeIn 0.8s ease-in;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        .weather-icon {
+            filter: drop-shadow(0 0 10px rgba(255, 255, 255, 0.5));
+        }
+    </style>
+</head>
+<body class="flex items-center justify-center p-4">
+    <div class="container max-w-2xl mx-auto">
+        <!-- En-tête -->
+        <div class="text-center mb-8 fade-in">
+            <h1 class="text-4xl md:text-5xl font-bold text-white mb-2">Météo Locale</h1>
+            <p class="text-white/80 text-lg">Conditions météorologiques actuelles</p>
+        </div>
+        
+        <!-- Carte météo principale -->
+        <div class="weather-card p-6 md:p-8 text-white mb-6 fade-in">
+            <!-- Localisation -->
+            <div class="flex justify-between items-center mb-6">
+                <div class="flex items-center">
+                    <i class="fas fa-map-marker-alt text-xl mr-2"></i>
+                    <h2 id="ville" class="text-2xl font-semibold capitalize">Chargement...</h2>
+                </div>
+                <button id="refresh" class="bg-white/20 hover:bg-white/30 p-2 rounded-full transition-all duration-300">
+                    <i class="fas fa-sync-alt"></i>
+                </button>
+            </div>
+            
+            <!-- Température et icône -->
+            <div class="flex flex-col md:flex-row items-center justify-between mb-6">
+                <div class="text-center md:text-left mb-4 md:mb-0">
+                    <div id="temperature" class="text-6xl md:text-7xl font-bold mb-2">
+                        <span id="temperature_label">--</span>°C
+                    </div>
+                    <div id="description" class="text-xl capitalize">--</div>
+                </div>
+                <div id="weather-icon" class="text-8xl md:text-9xl weather-icon">
+                    <i class="fas fa-sun"></i>
+                </div>
+            </div>
+            
+            <!-- Détails supplémentaires -->
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6">
+                <div class="bg-white/10 rounded-xl p-4 text-center">
+                    <i class="fas fa-wind text-xl mb-2"></i>
+                    <div class="text-sm">Vent</div>
+                    <div id="vent" class="font-semibold">-- km/h</div>
+                </div>
+                <div class="bg-white/10 rounded-xl p-4 text-center">
+                    <i class="fas fa-tint text-xl mb-2"></i>
+                    <div class="text-sm">Humidité</div>
+                    <div id="humidite" class="font-semibold">-- %</div>
+                </div>
+                <div class="bg-white/10 rounded-xl p-4 text-center">
+                    <i class="fas fa-temperature-low text-xl mb-2"></i>
+                    <div class="text-sm">Ressenti</div>
+                    <div id="ressenti" class="font-semibold">-- °C</div>
+                </div>
+                <div class="bg-white/10 rounded-xl p-4 text-center">
+                    <i class="fas fa-compress-arrows-alt text-xl mb-2"></i>
+                    <div class="text-sm">Pression</div>
+                    <div id="pression" class="font-semibold">-- hPa</div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Boutons d'action -->
+        <div class="flex flex-col sm:flex-row gap-4 justify-center">
+            <button id="changer" class="bg-white/20 hover:bg-white/30 text-white font-semibold py-3 px-6 rounded-xl transition-all duration-300 flex items-center justify-center">
+                <i class="fas fa-search-location mr-2"></i> Changer de ville
+            </button>
+            <button id="localisation" class="bg-blue-500 hover:bg-blue-600 text-white font-semibold py-3 px-6 rounded-xl transition-all duration-300 flex items-center justify-center">
+                <i class="fas fa-location-arrow mr-2"></i> Ma position
+            </button>
+        </div>
+        
+        <!-- Message d'état -->
+        <div id="status" class="text-center mt-6 text-white/80 text-sm"></div>
+    </div>
+
+    <script>
+        // Variables globales
+        let villeChoisie = "";
+        
+        // Éléments DOM
+        const villeElement = document.querySelector('#ville');
+        const temperatureElement = document.querySelector('#temperature_label');
+        const descriptionElement = document.querySelector('#description');
+        const weatherIconElement = document.querySelector('#weather-icon');
+        const ventElement = document.querySelector('#vent');
+        const humiditeElement = document.querySelector('#humidite');
+        const ressentiElement = document.querySelector('#ressenti');
+        const pressionElement = document.querySelector('#pression');
+        const changerDeVille = document.querySelector('#changer');
+        const localisationBtn = document.querySelector('#localisation');
+        const refreshBtn = document.querySelector('#refresh');
+        const statusElement = document.querySelector('#status');
+        
+        // Événements
+        document.addEventListener('DOMContentLoaded', () => {
+            statusElement.textContent = "Détection de votre position...";
+            obtenirLocalisation();
+        });
+        
+        changerDeVille.addEventListener('click', () => {
+            villeChoisie = prompt('Quelle ville souhaitez-vous voir ?', 'Paris');
+            if (villeChoisie && villeChoisie.trim() !== '') {
+                recevoirTemperature(villeChoisie.trim());
+            }
+        });
+        
+        localisationBtn.addEventListener('click', () => {
+            statusElement.textContent = "Détection de votre position...";
+            obtenirLocalisation();
+        });
+        
+        refreshBtn.addEventListener('click', () => {
+            if (villeChoisie) {
+                recevoirTemperature(villeChoisie);
+            } else {
+                obtenirLocalisation();
+            }
+        });
+        
+        // Fonctions
+        function obtenirLocalisation() {
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(
+                    position => {
+                        const lat = position.coords.latitude;
+                        const lon = position.coords.longitude;
+                        recevoirTemperatureParCoordonnees(lat, lon);
+                    },
+                    erreur => {
+                        console.error(erreur);
+                        statusElement.textContent = "Impossible d'obtenir votre position. Affichage de Paris par défaut.";
+                        recevoirTemperature("Paris");
+                    }
+                );
+            } else {
+                statusElement.textContent = "La géolocalisation n'est pas supportée par votre navigateur. Affichage de Paris par défaut.";
+                recevoirTemperature("Paris");
+            }
+        }
+        
+        function recevoirTemperatureParCoordonnees(lat, lon) {
+            const url = `https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lon}&appid=dc8c9152e8adaad0ec8bf635818c0d42&units=metric&lang=fr`;
+            
+            fetch(url)
+                .then(reponse => {
+                    if (!reponse.ok) {
+                        throw new Error('Erreur réseau');
+                    }
+                    return reponse.json();
+                })
+                .then(donnees => {
+                    afficherMeteo(donnees);
+                    statusElement.textContent = "Mise à jour réussie !";
+                })
+                .catch(erreur => {
+                    console.error(erreur);
+                    statusElement.textContent = "Erreur lors de la récupération des données météo.";
+                });
+        }
+        
+        function recevoirTemperature(ville) {
+            statusElement.innerHTML = '<div class="loading mr-2"></div> Chargement...';
+            
+            const url = `https://api.openweathermap.org/data/2.5/weather?q=${ville}&appid=dc8c9152e8adaad0ec8bf635818c0d42&units=metric&lang=fr`;
+            
+            fetch(url)
+                .then(reponse => {
+                    if (!reponse.ok) {
+                        throw new Error('Ville non trouvée');
+                    }
+                    return reponse.json();
+                })
+                .then(donnees => {
+                    afficherMeteo(donnees);
+                    statusElement.textContent = "Mise à jour réussie !";
+                })
+                .catch(erreur => {
+                    console.error(erreur);
+                    statusElement.textContent = "Ville non trouvée. Veuillez réessayer.";
+                    // Retour à la géolocalisation en cas d'erreur
+                    obtenirLocalisation();
+                });
+        }
+        
+        function afficherMeteo(donnees) {
+            // Mettre à jour les informations principales
+            villeElement.textContent = donnees.name;
+            temperatureElement.textContent = Math.round(donnees.main.temp);
+            descriptionElement.textContent = donnees.weather[0].description;
+            
+            // Mettre à jour les détails
+            ventElement.textContent = `${Math.round(donnees.wind.speed * 3.6)} km/h`;
+            humiditeElement.textContent = `${donnees.main.humidity} %`;
+            ressentiElement.textContent = `${Math.round(donnees.main.feels_like)} °C`;
+            pressionElement.textContent = `${donnees.main.pressure} hPa`;
+            
+            // Mettre à jour l'icône météo
+            mettreAJourIcone(donnees.weather[0].id, donnees.weather[0].icon);
+            
+            // Stocker la ville actuelle
+            villeChoisie = donnees.name;
+            
+            // Animation de fondu
+            document.querySelectorAll('.fade-in').forEach(el => {
+                el.style.animation = 'none';
+                setTimeout(() => {
+                    el.style.animation = 'fadeIn 0.8s ease-in';
+                }, 10);
+            });
+        }
+        
+        function mettreAJourIcone(codeMeteo, icone) {
+            let iconeClass = "fas fa-";
+            
+            // Déterminer l'icône en fonction du code météo
+            if (codeMeteo >= 200 && codeMeteo < 300) {
+                iconeClass += "bolt"; // Orage
+            } else if (codeMeteo >= 300 && codeMeteo < 500) {
+                iconeClass += "cloud-rain"; // Bruine/pluie légère
+            } else if (codeMeteo >= 500 && codeMeteo < 600) {
+                iconeClass += "cloud-showers-heavy"; // Pluie
+            } else if (codeMeteo >= 600 && codeMeteo < 700) {
+                iconeClass += "snowflake"; // Neige
+            } else if (codeMeteo >= 700 && codeMeteo < 800) {
+                iconeClass += "smog"; // Brume/brouillard
+            } else if (codeMeteo === 800) {
+                // Ciel dégagé - différencier jour/nuit si possible
+                if (icone.includes('d')) {
+                    iconeClass += "sun"; // Soleil (jour)
+                } else {
+                    iconeClass += "moon"; // Lune (nuit)
+                }
+            } else if (codeMeteo > 800) {
+                iconeClass += "cloud"; // Nuageux
+            } else {
+                iconeClass += "question"; // Par défaut
+            }
+            
+            weatherIconElement.innerHTML = `<i class="${iconeClass}"></i>`;
+        }
+    </script>
+</body>
+</html>
